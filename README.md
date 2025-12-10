@@ -1,6 +1,7 @@
 # Telegram Finance Bot
 
-Bot Telegram untuk pencatatan keuangan pribadi dengan AI-powered receipt scanning, integrasi Google Sheets, dan dukungan bahasa Indonesia.
+🤖 Bot Telegram untuk pencatatan keuangan pribadi dengan AI-powered receipt scanning, integrasi Google Sheets, dan dukungan bahasa Indonesia.
+
 
 ## Fitur Utama
 
