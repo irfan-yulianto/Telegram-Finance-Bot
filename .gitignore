@@ -1,0 +1,76 @@
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Credentials and secrets
+service-account-key.json
+credentials.json
+*.key
+*.pem
+
+# Data files
+bot_data.pickle
+*.pickle
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+bot.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Backup files
+*.bak
+backup/
+backups/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
