@@ -109,7 +109,7 @@ else:
 
 print("-" * 60 + "\n")
 
-# FIXED: Better SPREADSHEET_ID validation
+# SPREADSHEET_ID validation - handles both URL and direct ID formats
 def validate_spreadsheet_id(spreadsheet_id):
     """Validate and extract spreadsheet ID from URL or direct ID"""
     if not spreadsheet_id:
@@ -139,7 +139,6 @@ def validate_spreadsheet_id(spreadsheet_id):
 
 # Process SPREADSHEET_ID with better validation
 print(f"Using SPREADSHEET_ID: {SPREADSHEET_ID}")
-print(f"Debugging SPREADSHEET_ID: {SPREADSHEET_ID}")
 
 validated_spreadsheet_id = validate_spreadsheet_id(SPREADSHEET_ID)
 
@@ -151,10 +150,6 @@ else:
     USE_GOOGLE_SHEETS = True
     print(f"Final SPREADSHEET_ID: {SPREADSHEET_ID}")
 
-# REMOVE THIS LINE (yang menyebabkan crash):
-# raise ValueError("Invalid SPREADSHEET_ID URL format in .env file")
-
-# REPLACE WITH THIS:
 if not SPREADSHEET_ID:
     print("SPREADSHEET_ID not found, using JSON storage only")
     USE_GOOGLE_SHEETS = False
@@ -369,14 +364,8 @@ STATE_WAITING_CONFIRMATION = 'waiting_confirmation'
 
 # Configure Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-# MENJADI:
-import json
-import os
-# GANTI bagian credentials (sekitar line 100-124) dengan:
-import json
-import os
 
-# Better Google Sheets credentials handling
+# Google Sheets credentials handling
 def setup_google_sheets_credentials():
     """Setup Google Sheets credentials with proper error handling (supports JSON/Base64 in env, or file path)"""
 
