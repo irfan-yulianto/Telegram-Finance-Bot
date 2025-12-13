@@ -1,3 +1,29 @@
+"""
+Telegram Finance Bot - Personal Finance Tracking with AI
+=========================================================
+
+Bot untuk pencatatan keuangan pribadi dengan fitur:
+- Natural language transaction recording (Indonesian support)
+- AI-powered receipt scanning (Google Gemini)
+- Google Sheets integration for data storage
+- Automatic categorization and reporting
+
+Developer Notes:
+- Main entry point: main() function at the bottom
+- Handlers are registered in main() function
+- All Gemini API calls use call_gemini_with_retry() for rate limit handling
+- Local fallback parsers available when API fails
+
+Configuration:
+- Environment variables loaded from .env file
+- See .env.example for required variables
+"""
+
+# ============================================================
+# IMPORTS
+# ============================================================
+
+# Standard library
 import os
 import logging
 import json
@@ -5,27 +31,31 @@ import traceback
 import re
 import time
 import random
-from datetime import datetime, timedelta
 import asyncio
+import io
+from datetime import datetime, timedelta
+
+# Third-party libraries
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
 import telegram
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import PicklePersistence
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from telegram import BotCommand
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, BotCommand
+from telegram.ext import PicklePersistence, Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from dotenv import load_dotenv
 from PIL import Image
-import io
-import tempfile
 
-# Configure logging
+# ============================================================
+# LOGGING CONFIGURATION
+# ============================================================
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Version identifier for deployment verification
+# ============================================================
+# BOT VERSION & STARTUP
+# ============================================================
+
 BOT_VERSION = "v2025.12.09-rate-limit-fix"
 
 # Print startup banner
@@ -39,7 +69,12 @@ print("="*60 + "\n")
 logger.info(f"🚀 Finance Bot {BOT_VERSION} starting up...")
 logger.info(f"📅 Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-# Configuration
+# ============================================================
+# ENVIRONMENT CONFIGURATION
+# ============================================================
+# Required: TELEGRAM_TOKEN, GEMINI_API_KEY, AUTHORIZED_USER_ID
+# Optional: SPREADSHEET_ID, GOOGLE_SHEETS_CREDENTIALS_JSON
+
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
@@ -109,7 +144,7 @@ else:
 
 print("-" * 60 + "\n")
 
-# SPREADSHEET_ID validation - handles both URL and direct ID formats
+# FIXED: Better SPREADSHEET_ID validation
 def validate_spreadsheet_id(spreadsheet_id):
     """Validate and extract spreadsheet ID from URL or direct ID"""
     if not spreadsheet_id:
@@ -122,7 +157,6 @@ def validate_spreadsheet_id(spreadsheet_id):
     
     # If it's a URL, extract the ID
     if 'docs.google.com/spreadsheets/d/' in spreadsheet_id:
-        import re
         try:
             spreadsheet_url_pattern = r"/d/([a-zA-Z0-9-_]+)"
             match = re.search(spreadsheet_url_pattern, spreadsheet_id)
@@ -137,9 +171,7 @@ def validate_spreadsheet_id(spreadsheet_id):
     print(f"Using SPREADSHEET_ID as-is: {spreadsheet_id}")
     return spreadsheet_id
 
-# Process SPREADSHEET_ID with better validation
-print(f"Using SPREADSHEET_ID: {SPREADSHEET_ID}")
-
+# Process SPREADSHEET_ID with validation
 validated_spreadsheet_id = validate_spreadsheet_id(SPREADSHEET_ID)
 
 if not validated_spreadsheet_id:
@@ -148,7 +180,6 @@ if not validated_spreadsheet_id:
 else:
     SPREADSHEET_ID = validated_spreadsheet_id
     USE_GOOGLE_SHEETS = True
-    print(f"Final SPREADSHEET_ID: {SPREADSHEET_ID}")
 
 if not SPREADSHEET_ID:
     print("SPREADSHEET_ID not found, using JSON storage only")
@@ -163,9 +194,9 @@ genai.configure(api_key=GEMINI_API_KEY)
 # Supports: text, image, video, audio input
 GEMINI_MODEL = 'gemini-2.0-flash-lite'
 
+# Single model instance - gemini-2.0-flash-lite supports both text and vision (multimodal)
 model = genai.GenerativeModel(GEMINI_MODEL)
-# Model with vision capabilities for image analysis (same model, supports multimodal)
-vision_model = genai.GenerativeModel(GEMINI_MODEL)
+vision_model = model  # Alias for clarity in image processing code
 
 logger.info(f"🤖 Using Gemini model: {GEMINI_MODEL}")
 
@@ -503,9 +534,23 @@ print("="*60 + "\n")
 
 SPREADSHEET_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}"
 
+# ============================================================
+# AUTHORIZATION HELPER
+# ============================================================
+
 def is_authorized(user_id):
     """Check if the user is authorized to use the bot."""
     return str(user_id) in AUTHORIZED_USER_IDS
+
+# ============================================================
+# COMMAND HANDLERS
+# ============================================================
+# /sheet  - Show Google Sheets link
+# /hapus  - Delete transactions
+# /start  - Start bot and show menu
+# /catat  - Record transaction
+# /laporan - Show financial report
+# /help   - Show help message
 
 async def sheet_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -790,12 +835,7 @@ async def process_multiple_transactions(update: Update, context: ContextTypes.DE
         confirmation_message += f"Deskripsi: {processed_transaction['description']}\n\n"
     
     confirmation_message += "Apakah semua transaksi ini benar?"
-    
-    # Print for debugging
-    print(f"Storing {len(processed_transactions)} transactions in context")
-    for i, t in enumerate(processed_transactions):
-        print(f"Transaction {i+1}: {t}")
-    
+
     # Save processed transactions in context with a clear key
     context.user_data['pending_multiple_transactions'] = processed_transactions.copy()
     
@@ -983,7 +1023,6 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Validate date format (YYYY-MM-DD)
-    import re
     if not re.match(r'^\d{4}-\d{2}-\d{2}$', message_text):
         await update.message.reply_text(
             "❌ Format tanggal tidak valid. Gunakan format YYYY-MM-DD.\n"
@@ -1141,8 +1180,6 @@ async def confirm_delete_callback(update: Update, context: ContextTypes.DEFAULT_
             "✅ Transaksi dalam rentang tanggal telah dihapus.\n\n"
             f"Total {len(rows_to_delete)} transaksi telah dihapus."
         )
-
-from datetime import datetime, timedelta
 
 # Category emoji mapping for better visual summary
 CATEGORY_EMOJIS = {
@@ -1599,9 +1636,6 @@ async def parse_financial_data(text):
 
 def parse_date_from_text(text):
     """Attempt to extract a date from text using various methods."""
-    from datetime import datetime, timedelta
-    import re
-    
     # Current date for reference
     current_date = datetime.now()
     
@@ -1767,6 +1801,12 @@ async def keyboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await sheet_link(update, context)
     elif text == "🗑️ Hapus":
         await delete_data(update, context)
+
+# ============================================================
+# PHOTO/RECEIPT HANDLERS
+# ============================================================
+# Handles receipt image upload and AI-powered data extraction
+# Supports 3 modes: Total only, Per item, Per category
 
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle photo messages (receipts)"""
@@ -2193,7 +2233,14 @@ async def receipt_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Clear pending receipt data
     context.user_data.pop('pending_receipt', None)
 
+# ============================================================
+# MESSAGE HANDLERS
+# ============================================================
+# Main entry point for text messages
+# Routes to appropriate handler based on message content
+
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Main message handler - routes messages to appropriate processor."""
     user_id = update.effective_user.id
 
     # Check authorization
@@ -2335,7 +2382,6 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         balance = total_income - total_expense
 
         # Calculate period statistics
-        from datetime import datetime, timedelta
         current_date = datetime.now()
         current_month = current_date.month
         current_year = current_date.year
@@ -2584,36 +2630,6 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Detail: {str(e)[:100]}\n\n"
             f"Silakan hubungi administrator untuk bantuan."
         )
-
-# Fallback function to detect transaction type from text
-def detect_transaction_type(text):
-    text = text.lower()
-    
-    # Income indicators
-    income_words = [
-        "terima", "dapat", "pemasukan", "masuk", "diterima", 
-        "gaji", "bonus", "komisi", "dividen", "bunga", "hadiah", 
-        "warisan", "penjualan", "refund", "kembalian", "cashback",
-        "dibayar oleh", "transfer dari", "kiriman dari", "diberi", "dikasih"
-    ]
-    
-    # Expense indicators
-    expense_words = [
-        "beli", "bayar", "belanja", "pengeluaran", "keluar", "dibayar",
-        "membeli", "memesan", "berlangganan", "sewa", "booking",
-        "makanan", "transportasi", "bensin", "pulsa", "tagihan", "biaya", "iuran",
-        "dibayarkan untuk", "transfer ke", "kirim ke"
-    ]
-    
-    # Count matches
-    income_score = sum(1 for word in income_words if word in text)
-    expense_score = sum(1 for word in expense_words if word in text)
-    
-    # Determine type based on score
-    if income_score > expense_score:
-        return "income"
-    else:
-        return "expense"  # Default to expense if tied or no matches
 
 # Message handler for financial data with improved detection
 async def process_financial_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3172,10 +3188,6 @@ async def category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"📋 Traceback: {traceback.format_exc()}")
             # Continue with basic confirmation even if summary fails
 
-        # Force add debug info to message if summary wasn't added (for testing)
-        if not summary_added:
-            confirmation_message += f"\n\n🔧 Debug: No summary generated (check logs for details)"
-
         # Send message with proper error handling for Markdown parsing
         try:
             await query.edit_message_text(confirmation_message, parse_mode='Markdown')
@@ -3206,14 +3218,18 @@ async def category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Clear user data
         context.user_data.clear()
 
+# ============================================================
+# MAIN ENTRY POINT
+# ============================================================
+# Application setup and handler registration
+# Run with: python main.py
+
 def main():
-    # Create application
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-    
-    # Create persistence object with writable path
+    """Initialize and run the Telegram bot."""
+    # Create persistence object for data storage
     persistence = PicklePersistence(filepath="/app/data/bot_data.pickle")
-    
-    # Create application with persistence
+
+    # Build application with token and persistence
     application = Application.builder().token(TELEGRAM_TOKEN).persistence(persistence).build()
     
     # Add handlers
