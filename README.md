@@ -2,6 +2,8 @@
 
 🤖 Bot Telegram untuk pencatatan keuangan pribadi dengan AI-powered receipt scanning, integrasi Google Sheets, dan dukungan bahasa Indonesia.
 
+https://github.com/user-attachments/assets/2ac54979-62a9-4770-9ec8-72a8429b58cb
+
 
 ## Fitur Utama
 
